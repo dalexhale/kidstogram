@@ -7,6 +7,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Rubik+Bubbles&display=swap" rel="stylesheet">
+<!-- ============================================================
+     SUPABASE CONFIG — fill in your project's URL and anon key.
+     Both are safe in the browser: the anon key is public by design
+     and RLS is what actually guards the data. The service role key
+     must NEVER appear here.
+     ============================================================ -->
+<script>
+window.KIDSTOGRAM_SUPABASE = {
+  url: 'https://pzfnmjkylfuppxyrrmdy.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6Zm5tamt5bGZ1cHB4eXJybWR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMDcxMDYsImV4cCI6MjEwMTg4MzEwNn0.rYrQsAypjOZZfnjg7I7aj3wX2Qkoc6gj30VAecGzZXc'
+};
+</script>
 <style>
 :root{
   --sugar:#FAE6F1; --sugar-bottom:#E6E0F5; --lilac:#C9A6E8;
@@ -94,6 +106,10 @@ input.bad{border-color:var(--red);background:#FDECEA}
 }
 .taken.on{display:block}
 .row{display:flex;gap:9px;align-items:center;margin-top:6px}
+
+/* ===== 2b. pin unlock ===== */
+#unlock{padding:34px 20px 60px}
+#unlock.on{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh}
 
 /* ===== 3. wall ===== */
 header{padding:22px 18px 10px;text-align:center}
@@ -219,6 +235,12 @@ main{padding:16px 14px 128px;max-width:640px;margin:0 auto}
 .bar{position:fixed;left:0;right:0;bottom:0;padding:13px 16px calc(15px + env(safe-area-inset-bottom));
   background:linear-gradient(to top,var(--sugar-bottom) 62%,rgba(230,224,245,0));
   display:flex;gap:10px;justify-content:center;align-items:flex-end}
+/* a friendly note when something does not stick */
+.oopsnote{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%) rotate(-1deg);
+  background:var(--print);border:3px solid var(--ink);border-radius:18px 15px 19px 16px;
+  padding:9px 16px 11px;font-size:18px;color:var(--ink);box-shadow:0 5px 0 rgba(0,0,0,.2);
+  z-index:60;display:none;max-width:86vw;text-align:center}
+.oopsnote.on{display:block;animation:pop .2s ease-out}
 
 /* ===== 4. make ===== */
 #make{padding:18px 16px 40px}
@@ -463,6 +485,13 @@ input[type=range]{width:100%;height:34px;accent-color:var(--pink)}
   <div class="card">
     <h2>Who are you?</h2>
     <p class="hint">Only people on the wall can get in.</p>
+
+    <div id="googleStep">
+      <button class="big-btn blue" id="googlein" style="width:100%;text-align:center;margin-top:18px">Sign in with Google</button>
+    </div>
+    <p class="err" id="gmsg" style="display:none"></p>
+
+    <div id="profileStep" style="display:none">
     <label for="uname">Your username</label>
     <input type="text" id="uname" maxlength="18" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. libby.r">
     <div class="row">
@@ -480,6 +509,21 @@ input[type=range]{width:100%;height:34px;accent-color:var(--pink)}
     <div class="dots" id="dots"></div>
     <p class="err" id="loginerr"></p>
     <button class="big-btn blue" id="godin" style="width:100%;text-align:center">Let me in</button>
+    </div>
+  </div>
+</section>
+
+<!-- 2b -->
+<section id="unlock" class="screen">
+  <div class="card">
+    <h2>What are your 9 numbers?</h2>
+    <input type="password" id="unlockpin" inputmode="numeric" maxlength="9" autocomplete="off" placeholder="9 numbers" aria-label="Your 9 number password" style="margin-top:16px">
+    <div class="dots" id="unlockdots"></div>
+    <p class="err" id="unlockerr"></p>
+    <button class="big-btn blue" id="unlockgo" style="width:100%;text-align:center">Let me in</button>
+    <div class="row">
+      <button class="small-btn" id="unlockforgot" type="button">I forgot it</button>
+    </div>
   </div>
 </section>
 
@@ -735,23 +779,14 @@ const PHRASES=['I love this!','That is so cool','Wow!','Best one yet!','This mad
 const CHIP_COLOURS=['#F6D6E4','#DCEAF3','#E4EFD9','#F3E7F0','#FBEBD2','#E8E0F3'];
 
 /* ---------- posts ---------- */
-let nextId=100, openStamps=null, openCmts=null, openAV=null;
+let openStamps=null, openCmts=null, openAV=null;
 function rnd(a,b){return a+Math.random()*(b-a)}
-function newPost(who,o){
-  o=o||{};
-  return {id:nextId++,who,drawn:o.drawn||null,photo:o.photo||null,frames:o.frames||null,
-    bgKey:o.bgKey||null,bgColour:o.bgColour||null,fx:o.fx||[],mode:o.mode||'stick',
-    zoom:o.zoom||1,dx:o.dx||0,dy:o.dy||0,spin:o.spin||0,playing:false,
-    age:o.age||0,tilt:rnd(-2,2).toFixed(2),stamps:o.stamps||[],comments:o.comments||[]};
-}
-const SEED_PEOPLE=['libby.r','maya.k','noor.a','tess.w'];
-function someStamps(n){const o=[];for(let i=0;i<n;i++)o.push({
-  kind:STAMP_ORDER[Math.floor(Math.random()*STAMP_ORDER.length)],
-  by:SEED_PEOPLE[Math.floor(Math.random()*SEED_PEOPLE.length)],
-  x:rnd(6,74),y:rnd(6,74),spin:rnd(-25,25).toFixed(1)});return o}
+/* does a post have flip-book frames? the draft holds an array of frame
+   pictures; a wall post holds one wide sprite-sheet file from Supabase */
+function hasFrames(f){return !!f&&(Array.isArray(f)?f.length>0:!!f.sprite)}
 
-let friends=['maya.k','noor.a','tess.w'];
-const realNames={'libby.r':'Libby','maya.k':'Maya','noor.a':'Noor','tess.w':'Tess'};
+let friends=[];        // usernames, filled from Supabase after login
+const realNames={};    // username -> real name, filled from Supabase after login
 const online=new Set(['maya.k','tess.w']);   // pretend, for now
 
 function esc(t){return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -760,16 +795,7 @@ function nameHTML(u){
   const r=realNames[u];
   return esc(u)+(r?' <span class="realname">('+esc(r)+')</span>':'');
 }
-let posts=[
-  newPost('maya.k',{drawn:'cat',bgKey:'library',fx:['sparkles'],age:0,stamps:someStamps(3),
-    comments:[{who:'libby.r',txt:'Your cat is SO fluffy'},{who:'tess.w',txt:'i love him'}]}),
-  newPost('libby.r',{drawn:'rocket',bgKey:'space',fx:['stars'],age:1,stamps:someStamps(4),
-    comments:[{who:'noor.a',txt:'whoa it moves!!'}]}),
-  newPost('tess.w',{drawn:'cake',bgKey:'bedroom',fx:['confetti','hearts'],age:2,stamps:someStamps(2),comments:[]}),
-  newPost('noor.a',{drawn:'den',bgKey:'park',fx:['boots'],age:4,stamps:someStamps(2),
-    comments:[{who:'maya.k',txt:'best den ever'}]}),
-  newPost('libby.r',{drawn:'snow',bgKey:'rainbowsky',fx:['snowfx'],age:6,stamps:someStamps(5),comments:[]})
-];
+let posts=[];          // filled from Supabase after login
 
 /* ---------- helpers ---------- */
 function onTap(el,fn){
@@ -779,6 +805,13 @@ function onTap(el,fn){
 }
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   document.getElementById(id).classList.add('on');window.scrollTo(0,0);}
+/* a short friendly note when a save or load does not work */
+function flash(msg){
+  let el=document.getElementById('oops');
+  if(!el){el=document.createElement('div');el.id='oops';el.className='oopsnote';document.body.appendChild(el)}
+  el.textContent=msg;el.classList.remove('on');void el.offsetWidth;el.classList.add('on');
+  clearTimeout(flash._t);flash._t=setTimeout(()=>el.classList.remove('on'),2600);
+}
 
 
 /* ================= 0. how it works ================= */
@@ -928,7 +961,7 @@ const WORD1=['sparkly','bouncy','minty','glitter','sunny','peachy','frosty','cos
 'marble','waffle','pepper','tinsel'];
 const WORD2=['fox','otter','panda','robin','bunny','koala','swan','deer','newt','wren','moth','lynx','seal',
 'hare','finch','crab','owl','stoat','puffin','badger','shrew','vole'];
-const takenNames=new Set([...friends,'libby.r']);   // names that belong to somebody
+const takenNames=new Set();   // usernames the server has told us belong to somebody
 const suggestedNames=new Set();                      // names the button has already offered
 function makeUsername(){
   for(let t=0;t<300;t++){
@@ -943,7 +976,7 @@ function makeUsername(){
 const takenEl=document.getElementById('taken');
 function checkTaken(){
   const u=unameEl.value.trim().toLowerCase();
-  const clash=u.length>=3&&takenNames.has(u)&&u!==BOSS;
+  const clash=u.length>=3&&takenNames.has(u);
   takenEl.classList.toggle('on',clash);
   unameEl.classList.toggle('bad',clash);
   return clash;
@@ -954,19 +987,8 @@ onTap(document.getElementById('shuffle'),()=>{
   errEl.textContent='';unameEl.classList.remove('bad');takenEl.classList.remove('on');
 });
 const realEl=document.getElementById('realname');
-onTap(document.getElementById('godin'),()=>{
-  const u=unameEl.value.trim().toLowerCase();
-  const r=realEl.value.trim();
-  unameEl.classList.remove('bad');pinEl.classList.remove('bad');realEl.classList.remove('bad');
-  if(u.length<3){errEl.textContent='Your username needs at least 3 letters.';unameEl.classList.add('bad');return;}
-  if(takenNames.has(u)&&u!==BOSS){takenEl.classList.add('on');unameEl.classList.add('bad');errEl.textContent='';return;}
-  if(r.length<2){errEl.textContent='Put your real name in too, so people know it is you.';realEl.classList.add('bad');return;}
-  if(pinEl.value.length!==9){errEl.textContent='Your password needs exactly 9 numbers.';pinEl.classList.add('bad');return;}
-  errEl.textContent='';takenEl.classList.remove('on');
-  me=u;realNames[u]=r;takenNames.add(u);
-  if(!friends.includes(me))friends.push(me);
-  show('wallscreen');renderFaces();render();
-});
+/* "Sign in with Google" and "Let me in" are wired up in the Supabase
+   module at the bottom of the page. */
 
 /* ================= 3 ================= */
 function sleepsText(a){const l=LASTS_DAYS-a;if(l<=0)return'gone!';if(l===1)return'gone tomorrow';return l+' more sleeps'}
@@ -992,13 +1014,8 @@ function renderFaces(){
     f.appendChild(s);
   });
 }
-function kickOut(n){
-  if(!confirm('Kick '+n+' off the wall?\n\nTheir pictures and comments all go too.'))return;
-  friends=friends.filter(x=>x!==n);
-  posts=posts.filter(p=>p.who!==n);
-  posts.forEach(p=>p.comments=p.comments.filter(c=>c.who!==n));
-  renderFaces();render();
-}
+/* kickOut lives in the Supabase module: it suspends the account and writes
+   a moderation_events row. It deletes nobody and nothing. */
 
 function bgHTML(p){
   if(p.bgKey)return backdropSVG(p.bgKey);
@@ -1009,9 +1026,13 @@ function subjectHTML(p){
   if(p.videoUrl){
     return `<video src="${p.videoUrl}" playsinline loop preload="metadata"></video>`;
   }
-  if(p.frames&&p.frames.length){
-    return `<div class="strip" style="--n:${p.frames.length}">`+
-      p.frames.map(f=>`<img src="${f}" alt="">`).join('')+`</div>`;
+  if(hasFrames(p.frames)){
+    if(Array.isArray(p.frames)){
+      return `<div class="strip" style="--n:${p.frames.length}">`+
+        p.frames.map(f=>`<img src="${f}" alt="">`).join('')+`</div>`;
+    }
+    /* one wide sprite-sheet file: a single img filling the whole strip */
+    return `<div class="strip" style="--n:${p.frames.n}"><img src="${p.frames.sprite}" alt="" style="width:100%"></div>`;
   }
   if(p.photo)return `<img src="${p.photo}" alt="">`;
   if(p.drawn)return drawnSVG(p.drawn);
@@ -1025,7 +1046,7 @@ function render(){
 
   posts.forEach(p=>{
     const fade=fadeFor(p.age),left=LASTS_DAYS-p.age,
-          isVid=!!(p.videoUrl||(p.frames&&p.frames.length));
+          isVid=!!(p.videoUrl||hasFrames(p.frames));
     const card=document.createElement('div');
     card.className='print';card.dataset.id=p.id;
     card.style.setProperty('--tilt',p.tilt+'deg');
@@ -1115,7 +1136,7 @@ function commentBox(p){
     if(c.who===me||me===BOSS){
       const bin=document.createElement('button');bin.className='bin';bin.textContent='delete';
       bin.setAttribute('aria-label','Delete comment');
-      onTap(bin,e=>{e.stopPropagation();p.comments.splice(i,1);render()});
+      onTap(bin,e=>{e.stopPropagation();dbDeleteComment(p,c)});
       row.appendChild(bin);
     }
     box.appendChild(row);
@@ -1126,7 +1147,7 @@ function commentBox(p){
     const c=document.createElement('button');c.className='chip';c.textContent=txt;
     c.style.setProperty('--chipbg',CHIP_COLOURS[i%CHIP_COLOURS.length]);
     c.style.setProperty('--ctilt',(i%3===0?-1.5:i%3===1?1.5:0)+'deg');
-    onTap(c,e=>{e.stopPropagation();p.comments.push({who:me,txt});render()});
+    onTap(c,e=>{e.stopPropagation();dbAddComment(p,txt)});
     chips.appendChild(c);
   });
   box.appendChild(chips);
@@ -1135,7 +1156,7 @@ function commentBox(p){
   const form=document.createElement('div');form.className='cmt-form';
   const inp=document.createElement('input');inp.type='text';inp.maxLength=90;inp.placeholder='Write something kind…';
   const send=document.createElement('button');send.textContent='Send';
-  function postIt(){const v=inp.value.trim();if(!v)return;p.comments.push({who:me,txt:v});inp.value='';render()}
+  function postIt(){const v=inp.value.trim();if(!v)return;inp.value='';dbAddComment(p,v)}
   onTap(send,e=>{e.stopPropagation();postIt()});
   inp.addEventListener('keydown',e=>{if(e.key==='Enter')postIt()});
   inp.addEventListener('click',e=>e.stopPropagation());
@@ -1209,12 +1230,12 @@ function avPanel(p){
 function makeStampDraggable(el,s,photoEl){
   el.classList.add('movable');
   el.setAttribute('aria-label','Drag to move this stamp');
-  let live=false,px=0,py=0,ox=0,oy=0,box=null;
+  let live=false,px=0,py=0,ox=0,oy=0,box=null,moved=false;
 
   function point(e){const t=e.touches&&e.touches[0];return t?{x:t.clientX,y:t.clientY}:{x:e.clientX,y:e.clientY}}
   function start(e){
     e.stopPropagation();
-    live=true;box=photoEl.getBoundingClientRect();
+    live=true;moved=false;box=photoEl.getBoundingClientRect();
     const q=point(e);px=q.x;py=q.y;ox=parseFloat(s.x);oy=parseFloat(s.y);
     el.classList.add('dragging');
   }
@@ -1224,10 +1245,12 @@ function makeStampDraggable(el,s,photoEl){
     const q=point(e);
     const nx=Math.max(-4,Math.min(92,ox+(q.x-px)/box.width*100));
     const ny=Math.max(-4,Math.min(92,oy+(q.y-py)/box.height*100));
-    s.x=nx;s.y=ny;
+    s.x=nx;s.y=ny;moved=true;
     el.style.left=nx+'%';el.style.top=ny+'%';
   }
-  function end(){if(!live)return;live=false;el.classList.remove('dragging')}
+  /* the new spot is saved once, when the finger lets go — not during the drag */
+  function end(){if(!live)return;live=false;el.classList.remove('dragging');
+    if(moved){moved=false;dbMoveStamp(s,ox,oy)}}
 
   el.addEventListener('touchstart',start,{passive:true});
   el.addEventListener('touchmove',move,{passive:false});
@@ -1238,10 +1261,8 @@ function makeStampDraggable(el,s,photoEl){
   window.addEventListener('mouseup',end);
 }
 
-function addStamp(id,kind){
-  const p=posts.find(x=>x.id===id);if(!p||p.stamps.length>=16)return;
-  p.stamps.push({kind,by:me,x:rnd(5,74),y:rnd(5,74),spin:rnd(-25,25).toFixed(1)});render();
-}
+/* addStamp lives in the Supabase module: it saves the stamp first,
+   then puts it on the picture. */
 onTap(document.getElementById('tomorrow'),()=>{
   posts.forEach(p=>p.age++);
   const doomed=posts.filter(p=>p.age>=LASTS_DAYS).map(p=>p.id);
@@ -1280,7 +1301,7 @@ function buildPicker(){
     b.className=(draft.drawn===k&&!draft.photo&&!draft.frames&&!draft.videoUrl)?'sel':'';
     b.setAttribute('aria-label',k);
     b.innerHTML=`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#FBF8F1"/>${SCENES[k]}</svg>`;
-    onTap(b,()=>{draft.drawn=k;draft.photo=null;draft.frames=null;draft.videoUrl=null;draft.hasSound=false;drawDraft();buildPicker()});
+    onTap(b,()=>{draft.drawn=k;draft.photo=null;draft.photoBlob=null;draft.photoKind=null;draft.frames=null;draft.videoUrl=null;draft.videoBlob=null;draft.hasSound=false;drawDraft();buildPicker()});
     g.appendChild(b);
   });
 }
@@ -1432,9 +1453,10 @@ function recordClip(){
       if(!chunks.length){grabFlipbook().then(resolve);return}
       const blob=new Blob(chunks,{type:chunks[0].type||'video/webm'});
       if(draft.videoUrl) URL.revokeObjectURL(draft.videoUrl);
+      draft.videoBlob=blob;               // the exact recorded file, uploaded as-is
       draft.videoUrl=URL.createObjectURL(blob);
       draft.hasSound=true;
-      draft.frames=null;draft.photo=null;draft.drawn=null;
+      draft.frames=null;draft.photo=null;draft.photoBlob=null;draft.photoKind=null;draft.drawn=null;
       fitToMode();resolve();
     };
 
@@ -1459,8 +1481,8 @@ async function grabFlipbook(){
     await new Promise(r=>setTimeout(r,65));
   }
   countdownEl.classList.remove('on');countdownEl.textContent='';
-  draft.frames=frames;draft.videoUrl=null;draft.hasSound=false;
-  draft.photo=null;draft.drawn=null;fitToMode();
+  draft.frames=frames;draft.videoUrl=null;draft.videoBlob=null;draft.hasSound=false;
+  draft.photo=null;draft.photoBlob=null;draft.photoKind=null;draft.drawn=null;fitToMode();
 }
 function closeCam(){stopStream();camEl.classList.remove('on')}
 
@@ -1483,16 +1505,23 @@ function cutOutPaper(canvas){
   g.putImageData(d,0,0);
   return canvas;
 }
+function toBlobP(c,type,q){return new Promise(res=>c.toBlob(res,type,q))}
 async function shoot(){
   if(!stream)return;
   if(camMode==='video'){
     if(canRecord()) await recordClip();
     else await grabFlipbook();      // old silent way, if the browser cannot record
   }else{
+    /* the canvas re-encode below is what strips EXIF (including GPS) —
+       the raw camera frame never leaves the device */
     let c=grabFrame(620);
     if(camMode==='scan')c=cutOutPaper(c);
-    draft.photo=c.toDataURL(camMode==='scan'?'image/png':'image/jpeg',0.85);
-    draft.frames=null;draft.drawn=null;draft.videoUrl=null;draft.hasSound=false;fitToMode();
+    const blob=await toBlobP(c,camMode==='scan'?'image/png':'image/jpeg',0.85);
+    if(!blob){camnote.textContent='That did not work. Try again.';return}
+    if(draft.photo&&draft.photo.startsWith('blob:'))URL.revokeObjectURL(draft.photo);
+    draft.photoBlob=blob;draft.photoKind=camMode==='scan'?'drawing':'photo';
+    draft.photo=URL.createObjectURL(blob);
+    draft.frames=null;draft.drawn=null;draft.videoUrl=null;draft.videoBlob=null;draft.hasSound=false;fitToMode();
   }
   closeCam();drawDraft();buildPicker();
 }
@@ -1501,13 +1530,19 @@ filepick.addEventListener('change',e=>{
   const r=new FileReader();
   r.onload=()=>{
     const img=new Image();
-    img.onload=()=>{
+    img.onload=async()=>{
+      /* the picked file itself is never uploaded — only this canvas
+         re-encode, which is what strips EXIF (including GPS) */
       const c=document.createElement('canvas');c.width=c.height=620;
       const g=c.getContext('2d'),s=Math.min(img.width,img.height);
       g.drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,620,620);
       if(camMode==='scan')cutOutPaper(c);
-      draft.photo=c.toDataURL(camMode==='scan'?'image/png':'image/jpeg',0.85);
-      draft.frames=null;draft.drawn=null;draft.videoUrl=null;draft.hasSound=false;fitToMode();
+      const blob=await toBlobP(c,camMode==='scan'?'image/png':'image/jpeg',0.85);
+      if(!blob){camnote.textContent='That did not work. Try a different picture.';return}
+      if(draft.photo&&draft.photo.startsWith('blob:'))URL.revokeObjectURL(draft.photo);
+      draft.photoBlob=blob;draft.photoKind=camMode==='scan'?'drawing':'photo';
+      draft.photo=URL.createObjectURL(blob);
+      draft.frames=null;draft.drawn=null;draft.videoUrl=null;draft.videoBlob=null;draft.hasSound=false;fitToMode();
       closeCam();drawDraft();buildPicker();
     };
     img.src=r.result;
@@ -1975,15 +2010,352 @@ onTap(document.getElementById('add'),()=>{
   drawDraft();buildPicker();buildScenes();buildSwatches();buildFx();show('make');
 });
 onTap(document.getElementById('cancel'),()=>{closeCam();show('wallscreen')});
-onTap(document.getElementById('stickit'),()=>{
-  posts.unshift(newPost(me,{drawn:draft.drawn,photo:draft.photo,frames:draft.frames,
-    videoUrl:draft.videoUrl,hasSound:draft.hasSound,
-    bgKey:draft.bgKey,bgColour:draft.bgColour,fx:draft.fx.slice(),mode:draft.mode,
-    zoom:draft.zoom,dx:draft.dx,dy:draft.dy,spin:draft.spin,age:0,stamps:[],comments:[]}));
-  openStamps=null;openCmts=null;openAV=null;show('wallscreen');render();
+let sticking=false;
+onTap(document.getElementById('stickit'),async()=>{
+  if(sticking)return;sticking=true;
+  try{
+    const ok=await dbStickIt();
+    if(ok){openStamps=null;openCmts=null;openAV=null;show('wallscreen');renderFaces();render();}
+  }finally{sticking=false}
 });
 
 drawDraft();buildPicker();buildScenes();buildSwatches();buildFx();renderFaces();render();
+</script>
+
+<script type="module">
+/* ==========================================================
+   Supabase wiring — Google sign-in, the allowlist check and
+   profile creation. The parent's Google account is the
+   credential; the allowlist decision and the profile insert
+   both happen server-side in the check-allowlist edge
+   function. The 9-digit PIN is bcrypt-hashed here before it
+   leaves the device and gates nothing server-side.
+   ========================================================== */
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import bcrypt from 'https://esm.sh/bcryptjs@2.4.3';
+
+/* A redirect straight back from Google carries tokens in the URL. That
+   interactive sign-in is the grown-up proving who they are, so it skips
+   the PIN unlock once — which is also the recovery path when the PIN is
+   forgotten. A session quietly restored from storage never skips it.
+   Captured before createClient, which cleans the URL. */
+const freshSignIn=/[#&?](access_token|code)=/.test(location.hash+'&'+location.search);
+
+const sb=createClient(window.KIDSTOGRAM_SUPABASE.url,window.KIDSTOGRAM_SUPABASE.anonKey);
+
+const googleStep=document.getElementById('googleStep'),
+      profileStep=document.getElementById('profileStep'),
+      gmsg=document.getElementById('gmsg');
+
+const OOPS='That did not work. Try again in a minute.';
+const NOT_ON_WALL='This Google account is not on the wall yet. Ask your grown-up to set it up.';
+const SUSPENDED='The wall is not open for you right now. Ask your grown-up about it.';
+
+/* pin unlock screen */
+const unlockPinEl=document.getElementById('unlockpin'),
+      unlockDotsEl=document.getElementById('unlockdots'),
+      unlockErrEl=document.getElementById('unlockerr');
+for(let i=0;i<9;i++){const d=document.createElement('div');d.className='dot';unlockDotsEl.appendChild(d);}
+unlockPinEl.addEventListener('input',()=>{unlockPinEl.value=unlockPinEl.value.replace(/\D/g,'').slice(0,9);
+  [...unlockDotsEl.children].forEach((d,i)=>d.classList.toggle('full',i<unlockPinEl.value.length));});
+let pending=null;   // {username, realName, pinHash} while the unlock screen is up
+
+function hashPin(pin){
+  return new Promise((res,rej)=>bcrypt.hash(pin,10,(e,h)=>e?rej(e):res(h)));
+}
+function comparePin(pin,hash){
+  return new Promise((res,rej)=>bcrypt.compare(pin,hash,(e,ok)=>e?rej(e):res(ok)));
+}
+function say(msg,calm){
+  gmsg.textContent=msg||'';gmsg.style.display=msg?'':'none';
+  gmsg.style.color=calm?'var(--pencil)':'';
+}
+function stepGoogle(msg){
+  googleStep.style.display='';profileStep.style.display='none';say(msg);
+}
+function stepProfile(){
+  googleStep.style.display='none';profileStep.style.display='';say('');
+}
+/* ==========================================================
+   The wall's data layer. posts / friends / realNames are
+   filled from Supabase; the bucket is private, so every file
+   is fetched through a signed URL (1 hour, cached in memory
+   for the session). Never a public URL.
+   ========================================================== */
+let myId=null;
+const profilesById=new Map();
+const urlCache=new Map();   // storage path -> {url, exp}
+
+const STICK_FAIL='That did not stick. Try again.';
+const LOAD_FAIL='The wall did not load. Try again in a minute.';
+
+async function signPaths(paths){
+  const need=[...new Set(paths)].filter(p=>{
+    const c=urlCache.get(p);return !(c&&c.exp>Date.now()+5*60e3);
+  });
+  if(!need.length)return;
+  const {data,error}=await sb.storage.from('media').createSignedUrls(need,3600);
+  if(error)throw error;
+  (data||[]).forEach(d=>{
+    const u=d.signedUrl||d.signedURL;
+    if(u)urlCache.set(d.path,{url:u,exp:Date.now()+3600e3});
+  });
+}
+function signedUrlFor(path){const c=urlCache.get(path);return c?c.url:null}
+function uname(id){const p=profilesById.get(id);return p?p.username:'?'}
+
+function mapPost(r){
+  const url=r.storage_path?signedUrlFor(r.storage_path):null;
+  const isRealVideo=r.kind==='video'&&r.frame_count===1;
+  const isStrip=r.kind==='video'&&r.frame_count>1;
+  return {
+    id:r.id, who:uname(r.author_id),
+    drawn:r.drawn_key||null,
+    photo:(r.kind==='photo'||r.kind==='drawing')?url:null,
+    frames:isStrip?{sprite:url,n:r.frame_count}:null,
+    videoUrl:isRealVideo?url:null,
+    hasSound:isRealVideo,
+    bgKey:r.bg_key||null, bgColour:r.bg_colour||null,
+    fx:r.fx||[], mode:r.sit||'stick',
+    zoom:r.zoom, dx:r.dx, dy:r.dy, spin:r.spin,
+    playing:false,
+    age:Math.max(0,Math.floor((Date.now()-new Date(r.created_at).getTime())/864e5)),
+    tilt:rnd(-2,2).toFixed(2),
+    stamps:(r.stamps||[]).map(s=>({id:s.id,kind:s.kind,by:uname(s.author_id),x:s.x,y:s.y,spin:s.spin})),
+    comments:(r.comments||[]).slice()
+      .sort((a,b)=>a.created_at<b.created_at?-1:1)
+      .map(c=>({id:c.id,who:uname(c.author_id),txt:c.body}))
+  };
+}
+
+async function loadWall(){
+  const [profRes,postRes]=await Promise.all([
+    sb.from('profiles').select('id,username,real_name,is_owner,suspended'),
+    sb.from('posts').select('*, stamps(*), comments(*)').order('created_at',{ascending:false})
+  ]);
+  if(profRes.error)throw profRes.error;
+  if(postRes.error)throw postRes.error;
+  profilesById.clear();
+  profRes.data.forEach(p=>profilesById.set(p.id,p));
+  for(const k of Object.keys(realNames))delete realNames[k];
+  profRes.data.forEach(p=>{realNames[p.username]=p.real_name});
+  friends=profRes.data.filter(p=>!p.suspended).map(p=>p.username).sort();
+  await signPaths(postRes.data.map(r=>r.storage_path).filter(Boolean));
+  posts=postRes.data.map(mapPost);
+}
+
+async function enterWall(username,realName){
+  const {data:{user}}=await sb.auth.getUser();
+  myId=user?user.id:null;
+  me=username;
+  realNames[username]=realName;
+  if(!friends.includes(username))friends.push(username);
+  try{await loadWall();}
+  catch(e){flash(LOAD_FAIL);}
+  show('wallscreen');renderFaces();render();
+}
+
+/* ---------- sticking a new post on ---------- */
+function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src})}
+async function spriteBlob(frames){
+  /* flip-book fallback: composite the frames into ONE wide sprite-sheet
+     JPEG — one upload, one signed URL, one fetch. Canvas re-encode, so
+     no EXIF here either. */
+  const imgs=await Promise.all(frames.map(loadImg));
+  const fw=imgs[0].width||400,fh=imgs[0].height||400;
+  const c=document.createElement('canvas');c.width=fw*imgs.length;c.height=fh;
+  const g=c.getContext('2d');
+  imgs.forEach((im,i)=>g.drawImage(im,i*fw,0,fw,fh));
+  return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('toBlob failed')),'image/jpeg',0.7));
+}
+
+window.dbStickIt=async function(){
+  let kind,blob=null,ext='',contentType='',frameCount=1;
+  try{
+    if(draft.videoBlob){
+      if(draft.videoBlob.size>8*1024*1024){flash('That video is too big. Please record it again.');return false}
+      kind='video';blob=draft.videoBlob;
+      contentType=blob.type||'video/webm';
+      ext=contentType.includes('mp4')?'mp4':'webm';
+    }else if(draft.frames&&draft.frames.length){
+      kind='video';frameCount=draft.frames.length;
+      blob=await spriteBlob(draft.frames);
+      contentType='image/jpeg';ext='jpg';
+    }else if(draft.photoBlob){
+      kind=draft.photoKind==='drawing'?'drawing':'photo';
+      blob=draft.photoBlob;
+      contentType=blob.type||'image/jpeg';
+      ext=contentType==='image/png'?'png':'jpg';
+    }else if(draft.drawn){
+      kind='made_up';
+    }else{flash(STICK_FAIL);return false}
+  }catch(e){flash(STICK_FAIL);return false}
+
+  const postId=crypto.randomUUID();
+  let storage_path=null;
+  if(blob){
+    storage_path=myId+'/'+postId+'.'+ext;
+    const {error:upErr}=await sb.storage.from('media').upload(storage_path,blob,{contentType});
+    if(upErr){flash(STICK_FAIL);return false}
+  }
+  const {error:insErr}=await sb.from('posts').insert({
+    id:postId,author_id:myId,kind,storage_path,frame_count:frameCount,
+    drawn_key:kind==='made_up'?draft.drawn:null,
+    bg_key:draft.bgKey,bg_colour:draft.bgColour,sit:draft.mode,
+    fx:draft.fx.slice(0,3),zoom:draft.zoom,dx:draft.dx,dy:draft.dy,spin:draft.spin
+  });
+  if(insErr){
+    if(storage_path)sb.storage.from('media').remove([storage_path]);
+    flash(STICK_FAIL);return false;
+  }
+  try{await loadWall();}catch(e){flash(LOAD_FAIL);}
+  return true;
+};
+
+/* ---------- comments ---------- */
+window.dbAddComment=async function(p,txt){
+  const {data,error}=await sb.from('comments')
+    .insert({post_id:p.id,author_id:myId,body:txt}).select('id').single();
+  if(error){flash(STICK_FAIL);return}
+  p.comments.push({id:data.id,who:me,txt});render();
+};
+window.dbDeleteComment=async function(p,c){
+  const {error}=await sb.from('comments').delete().eq('id',c.id);
+  if(error){flash(OOPS);return}
+  const i=p.comments.indexOf(c);if(i>=0)p.comments.splice(i,1);
+  render();
+};
+
+/* ---------- stamps ---------- */
+window.addStamp=async function(id,kind){
+  const p=posts.find(x=>x.id===id);if(!p||p.stamps.length>=16)return;
+  const s={post_id:id,author_id:myId,kind,x:rnd(5,74),y:rnd(5,74),spin:+rnd(-25,25).toFixed(1)};
+  const {data,error}=await sb.from('stamps').insert(s).select('id').single();
+  if(error){flash(STICK_FAIL);return}
+  p.stamps.push({id:data.id,kind,by:me,x:s.x,y:s.y,spin:s.spin});render();
+};
+window.dbMoveStamp=async function(s,ox,oy){
+  const {error}=await sb.from('stamps').update({x:s.x,y:s.y}).eq('id',s.id);
+  if(error){s.x=ox;s.y=oy;render();flash(OOPS);}
+};
+
+/* ---------- the kick-out button ----------
+   Suspends the account and writes the moderation log.
+   Deletes nobody and nothing. */
+window.kickOut=async function(n){
+  if(!confirm('Kick '+n+' off the wall?\n\nA grown-up can let them back in.'))return;
+  const t=[...profilesById.values()].find(x=>x.username===n);
+  if(!t)return;
+  const {error:e1}=await sb.from('profiles').update({suspended:true}).eq('id',t.id);
+  if(e1){flash(OOPS);return}
+  const {error:e2}=await sb.from('moderation_events')
+    .insert({actor_id:myId,target_id:t.id,action:'suspend',detail:'kick-out button'});
+  if(e2)flash(OOPS);
+  try{await loadWall();}catch(e){}
+  renderFaces();render();
+};
+
+async function routeLogin(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){stepGoogle();return;}
+  googleStep.style.display='none';profileStep.style.display='none';
+  say('Checking…');
+  let data,error;
+  try{({data,error}=await sb.functions.invoke('check-allowlist',{body:{mode:'check'}}));}
+  catch(e){error=e;}
+  if(error||!data){stepGoogle(OOPS);return;}
+  if(!data.allowed){
+    await sb.auth.signOut();
+    stepGoogle(NOT_ON_WALL);
+    return;
+  }
+  if(!data.has_profile){stepProfile();return;}
+  if(data.suspended){
+    googleStep.style.display='none';profileStep.style.display='none';
+    say(SUSPENDED,true);
+    return;
+  }
+  const {data:{user}}=await sb.auth.getUser();
+  const [{data:prof,error:pErr},{data:pinHash,error:hErr}]=await Promise.all([
+    sb.from('profiles').select('username,real_name').eq('id',user.id).single(),
+    sb.rpc('my_pin_hash')
+  ]);
+  if(pErr||!prof||hErr){stepGoogle(OOPS);return;}
+  say('');
+  if(freshSignIn||!pinHash){enterWall(prof.username,prof.real_name);return;}
+  pending={username:prof.username,realName:prof.real_name,pinHash};
+  unlockPinEl.value='';unlockPinEl.classList.remove('bad');
+  [...unlockDotsEl.children].forEach(d=>d.classList.remove('full'));
+  unlockErrEl.textContent='';
+  show('unlock');
+}
+
+let unlocking=false;
+onTap(document.getElementById('unlockgo'),async()=>{
+  if(unlocking||!pending)return;
+  unlockPinEl.classList.remove('bad');
+  if(unlockPinEl.value.length!==9){unlockErrEl.textContent='Your password needs exactly 9 numbers.';unlockPinEl.classList.add('bad');return;}
+  unlocking=true;
+  try{
+    const ok=await comparePin(unlockPinEl.value,pending.pinHash);
+    if(!ok){unlockErrEl.textContent='Those are not your 9 numbers. Try again.';unlockPinEl.classList.add('bad');return;}
+    unlockErrEl.textContent='';
+    const p=pending;pending=null;
+    enterWall(p.username,p.realName);
+  }finally{unlocking=false;}
+});
+onTap(document.getElementById('unlockforgot'),async()=>{
+  pending=null;
+  await sb.auth.signOut();
+  show('login');
+  stepGoogle();
+});
+
+onTap(document.getElementById('googlein'),async()=>{
+  say('');
+  const {error}=await sb.auth.signInWithOAuth({provider:'google',
+    options:{redirectTo:location.origin+location.pathname}});
+  if(error)say(OOPS);
+});
+
+/* runs after the classic handler on the same button has shown #login */
+onTap(document.getElementById('promise'),routeLogin);
+
+let creating=false;
+onTap(document.getElementById('godin'),async()=>{
+  if(creating)return;
+  const u=unameEl.value.trim().toLowerCase();
+  const r=realEl.value.trim();
+  unameEl.classList.remove('bad');pinEl.classList.remove('bad');realEl.classList.remove('bad');
+  if(u.length<3){errEl.textContent='Your username needs at least 3 letters.';unameEl.classList.add('bad');return;}
+  if(takenNames.has(u)){takenEl.classList.add('on');unameEl.classList.add('bad');errEl.textContent='';return;}
+  if(r.length<2){errEl.textContent='Put your real name in too, so people know it is you.';realEl.classList.add('bad');return;}
+  if(pinEl.value.length!==9){errEl.textContent='Your password needs exactly 9 numbers.';pinEl.classList.add('bad');return;}
+  errEl.textContent='';takenEl.classList.remove('on');
+  creating=true;
+  try{
+    const pin_hash=await hashPin(pinEl.value);
+    let data,error;
+    try{({data,error}=await sb.functions.invoke('check-allowlist',
+      {body:{mode:'create-profile',username:u,real_name:r,pin_hash}}));}
+    catch(e){error=e;}
+    if(error||!data){errEl.textContent=OOPS;return;}
+    if(!data.ok){
+      if(data.error==='username_taken'){
+        takenNames.add(u);takenEl.classList.add('on');unameEl.classList.add('bad');errEl.textContent='';
+      }else if(data.error==='not_allowed'){
+        await sb.auth.signOut();
+        stepGoogle(NOT_ON_WALL);
+      }else if(data.error==='already_has_profile'){
+        await routeLogin();
+      }else{
+        errEl.textContent=OOPS;
+      }
+      return;
+    }
+    enterWall(data.username,data.real_name);
+  }finally{creating=false;}
+});
 </script>
 </body>
 </html>

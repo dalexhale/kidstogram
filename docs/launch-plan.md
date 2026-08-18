@@ -169,11 +169,10 @@ $$;
 create policy "members see each other" on profiles
   for select using (is_member());
 
-create policy "you create your own profile" on profiles
-  for insert with check (
-    id = auth.uid()
-    and exists (select 1 from allowlist a where a.parent_email = profiles.parent_email)
-  );
+-- deliberately no INSERT policy on profiles: an insert policy can't check the
+-- allowlist (policy subqueries run as the calling user, and allowlist has no
+-- read policy, so the check would always fail). Profiles are created by the
+-- check-allowlist edge function with the service role instead — see 5.2.
 
 create policy "you edit your own profile" on profiles
   for update using (id = auth.uid()) with check (id = auth.uid() and is_owner = (select is_owner from profiles p where p.id = auth.uid()));
@@ -262,13 +261,28 @@ session.user.email
   → not found?  sign out immediately, show "ask your grown-up to set this up"
   → found, no profile yet?  show the username / real name screen, insert profile
   → found, profile exists, suspended? show a calm message, no wall
-  → otherwise: the wall
+  → otherwise: the PIN unlock (5.3), then the wall
 ```
 
 Do the allowlist check server-side in an edge function. If you do it in the browser you're trusting the client, which defeats it.
 
-**5.3** The 9-digit PIN.
-Keep it — Libby designed it and it's a nice bit of UI. But it is **not** the credential. It's a device unlock on top of an already-authenticated Google session, so a kid can hand the tablet to a sibling without handing over the wall. Store `pin_hash` (bcrypt via pgcrypto) on the profile, verify client-side against a fetched hash, and never let it gate anything server-side.
+The same edge function also **inserts the profile row with the service role** after the allowlist check passes (taking the username / real name from the request). There is deliberately no INSERT policy on `profiles`, so this is the only way a profile can be created.
+
+**5.3** The 9-digit PIN — a device unlock, as built.
+Keep it — Libby designed it and it's a nice bit of UI. But it is **not** the credential. It's a device unlock on top of an already-authenticated Google session, so a kid can hand the tablet to a sibling without handing over the wall.
+
+- At profile creation the PIN is bcrypt-hashed in the browser (bcryptjs, cost 10)
+  and stored on the profile as `pin_hash` by the check-allowlist edge function.
+- On a later visit, when a stored session and a profile already exist, an unlock
+  screen asks for the 9 numbers before the wall. The hash comes back through
+  `my_pin_hash()` (security definer, caller's own row only — column grants keep
+  `pin_hash` and `parent_email` out of the members' profiles select entirely)
+  and is checked client-side with bcrypt.compare.
+- A fresh interactive Google sign-in — the redirect straight back from Google —
+  skips the unlock once. The parent is the credential, so "I forgot it" on the
+  unlock screen signs out, and a grown-up signing in again is the recovery path.
+  A session quietly restored from storage never skips it.
+- The PIN gates nothing server-side, ever.
 
 Do not explain this distinction to Libby as "your password doesn't count." It does count — it just isn't the front door.
 
