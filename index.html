@@ -445,8 +445,9 @@ input[type=range]{width:100%;height:34px;accent-color:var(--pink)}
   <filter id="crayon2"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="19" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2" xChannelSelector="R" yChannelSelector="G"/></filter>
 </svg>
 
-<!-- 0 -->
-<section id="howto" class="screen on">
+<!-- 0 — shown by boot() only the first time; returning people start at the
+     no-bullying screen, which is never skipped -->
+<section id="howto" class="screen">
   <div class="how-card">
     <div id="howArt"></div>
     <h2 id="howTitle"></h2>
@@ -942,7 +943,7 @@ function renderHow(){
 onTap(howBack,()=>{if(howIdx>0){howIdx--;renderHow()}});
 onTap(howNext,()=>{
   if(howIdx<HOWTO.length-1){howIdx++;renderHow()}
-  else{howIdx=0;renderHow();show('welcome')}
+  else{howIdx=0;renderHow();markWalkthroughSeen();show('welcome')}
 });
 renderHow();
 
@@ -2321,6 +2322,40 @@ onTap(document.getElementById('googlein'),async()=>{
 /* runs after the classic handler on the same button has shown #login */
 onTap(document.getElementById('promise'),routeLogin);
 
+/* ---------- who sees the walkthrough? ----------
+   Libby's rule: the how-it-works pages show only the FIRST time a person
+   uses the app. The no-bullying screen shows every single time — never
+   skipped. So the app checks the session before showing anything:
+     no session               -> walkthrough (they are brand new here)
+     session, no profile yet  -> no-bullying (they watched the walkthrough
+                                 just before signing in with Google)
+     profile, not seen yet    -> walkthrough, saved as seen at the last page
+     profile, seen already    -> no-bullying */
+async function boot(){
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){show('howto');return}
+    const {data:prof,error}=await sb.from('profiles')
+      .select('seen_walkthrough').eq('id',session.user.id).maybeSingle();
+    if(!error&&prof&&!prof.seen_walkthrough){show('howto');return}
+    show('welcome');
+  }catch(e){
+    show('howto');
+  }
+}
+
+/* called from the walkthrough's last page, and again right after a new
+   profile is created. Failure is harmless — the walkthrough just shows
+   once more next time and saves itself then — so no message. */
+window.markWalkthroughSeen=function(){
+  sb.auth.getSession().then(({data:{session}})=>{
+    if(!session)return;
+    return sb.from('profiles').update({seen_walkthrough:true}).eq('id',session.user.id);
+  }).then(r=>{if(r&&r.error)console.warn('seen_walkthrough not saved',r.error)});
+};
+
+boot();
+
 let creating=false;
 onTap(document.getElementById('godin'),async()=>{
   if(creating)return;
@@ -2353,6 +2388,7 @@ onTap(document.getElementById('godin'),async()=>{
       }
       return;
     }
+    markWalkthroughSeen();   // they watched it just before signing in
     enterWall(data.username,data.real_name);
   }finally{creating=false;}
 });

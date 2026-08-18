@@ -51,8 +51,10 @@ Closed wall. Four members. Everyone sees everything anyone posts. No private mes
   name always shown. No edit, only delete.
 - **Games** — Noughts and Crosses, Connect 4 (both hot-seat, two-player), and Pin the Tail
   on the Donkey (weekly seeded round, one go each, leaderboard).
-- **Onboarding** — a 7-page how-it-works walkthrough, then a no-bullying screen, then login.
-  All three are compulsory every session. That is deliberate.
+- **Onboarding** — a 7-page how-it-works walkthrough on a person's **first use only**
+  (tracked by `seen_walkthrough` on profiles), then a no-bullying screen, then login.
+  The no-bullying screen still shows **every session, without exception**. There is
+  deliberately no skip button and no help link — Libby removed both.
 - **Moderation** — a kick-out button visible only to the owner account (`libby.r`).
 
 ---
