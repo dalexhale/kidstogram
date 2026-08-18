@@ -97,6 +97,10 @@ server-side. The client is a rendering layer.
 - Images go through `canvas.drawImage()` + re-encode before upload. **This is what strips
   EXIF/GPS.** Never upload a raw `File` from the picker as an "optimisation".
 - Comments have no UPDATE policy on purpose — they cannot be silently edited after posting.
+- Deleted posts are **soft-deleted** (`deleted_at`) and purged by the sweep 72 hours
+  later, so a grown-up can investigate an incident before the evidence is gone. This is
+  deliberate — do not change it back to a hard delete, in the client, the policies or
+  the sweep.
 
 **The 9-digit PIN is not a credential.** It is a device unlock on top of an authenticated
 Google session. Do not let it gate anything server-side. Do not remove it either — it is
@@ -112,7 +116,8 @@ function; posts, uploads, stamps and comments through RLS-guarded tables, with s
 URLs from the private bucket; real presence for the online dots over a private
 Realtime channel; and Pin the Tail's weekly rounds and leaderboard in `game_rounds` /
 `game_scores`, seeded server-side. The `sweep` edge function (hourly, via pg_cron)
-deletes expired posts and their storage files, and mints the weekly game rounds.
+purges expired posts and 72-hour-old soft-deleted ones — storage files and rows both —
+and mints the weekly game rounds.
 
 ### Not yet built
 - Musical Chairs and Piñata Smash (the other two party games) — **not yet approved for port**

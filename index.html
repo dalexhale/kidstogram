@@ -2100,7 +2100,6 @@ function mapPost(r){
   const isStrip=r.kind==='video'&&r.frame_count>1;
   return {
     id:r.id, who:uname(r.author_id),
-    storagePath:r.storage_path||null,   // so deleting a post can remove its file too
     drawn:r.drawn_key||null,
     photo:(r.kind==='photo'||r.kind==='drawing')?url:null,
     frames:isStrip?{sprite:url,n:r.frame_count}:null,
@@ -2228,18 +2227,15 @@ window.dbStickIt=async function(){
 };
 
 /* ---------- deleting a post ----------
-   Your own, or any if you are the owner — the RLS policies on posts and
-   storage.objects both allow exactly that pair. The FILE goes first: if
-   the row delete then fails, the sweep still finds the row at expiry and
-   finishes the job, whereas a row-first order could orphan the file in
-   the bucket forever. */
+   A SOFT delete: it sets deleted_at and the post vanishes from every
+   wall at once (the select policy excludes it). The sweep purges the
+   file and the row 72 hours later. That gap is deliberate — it lets a
+   grown-up investigate an incident before the evidence disappears — so
+   do not "fix" this back into a hard delete. Your own posts, or any if
+   you are the owner; the update policy allows exactly that pair. */
 window.dbDeletePost=async function(p){
   if(!confirm('Delete this picture?\n\nIt will be gone for everyone, for good.'))return;
-  if(p.storagePath){
-    const {error:rmErr}=await sb.storage.from('media').remove([p.storagePath]);
-    if(rmErr){flash(OOPS);return}
-  }
-  const {error}=await sb.from('posts').delete().eq('id',p.id);
+  const {error}=await sb.from('posts').update({deleted_at:new Date().toISOString()}).eq('id',p.id);
   if(error){flash(OOPS);return}
   posts=posts.filter(x=>x.id!==p.id);
   render();
