@@ -106,17 +106,16 @@ Libby's design and she is attached to it.
 
 ## Current state
 
-`index.html` is a complete, working front end running entirely on fake in-memory data.
-Every screen and interaction listed above is built and functional. There is no backend yet.
-
-Porting it means replacing the in-memory `posts`, `friends`, `realNames` and `online`
-variables with Supabase queries, and swapping data-URL images for signed URLs. The UI
-should not need redesigning.
+`index.html` is the complete front end, running on the Supabase backend: Google
+sign-in with the allowlist check and profile creation in the `check-allowlist` edge
+function; posts, uploads, stamps and comments through RLS-guarded tables, with signed
+URLs from the private bucket; real presence for the online dots over a private
+Realtime channel; and Pin the Tail's weekly rounds and leaderboard in `game_rounds` /
+`game_scores`, seeded server-side. The `sweep` edge function (hourly, via pg_cron)
+deletes expired posts and their storage files, and mints the weekly game rounds.
 
 ### Not yet built
-- All backend (see `docs/launch-plan.md`)
 - Musical Chairs and Piñata Smash (the other two party games) — **not yet approved for port**
-- Real presence for the online dots (currently a hardcoded pretend set)
 - Cross-device play for the two-player games (currently hot-seat only)
 
 ### Known open questions

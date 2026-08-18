@@ -228,8 +228,6 @@ main{padding:16px 14px 128px;max-width:640px;margin:0 auto}
 .cmt-form button{border:3px solid var(--ink);background:var(--green);border-radius:14px;
   font-family:'Rubik Bubbles',cursive;font-size:17px;padding:0 14px;cursor:pointer;color:var(--ink)}
 .kind-note{font-size:15px;color:var(--pencil);margin:7px 0 0;text-align:center}
-.print.gone{animation:driftoff .8s ease-in forwards;pointer-events:none}
-@keyframes driftoff{to{transform:rotate(14deg) translateY(60px) scale(.8);opacity:0}}
 .empty{text-align:center;padding:56px 24px;font-size:23px;color:var(--pencil)}
 .empty span{display:block;font-size:18px;margin-top:9px}
 .bar{position:fixed;left:0;right:0;bottom:0;padding:13px 16px calc(15px + env(safe-area-inset-bottom));
@@ -563,7 +561,6 @@ input[type=range]{width:100%;height:34px;accent-color:var(--pink)}
   </header>
   <main id="wall"></main>
   <div class="bar">
-    <button class="small-btn" id="tomorrow">Pretend it's tomorrow</button>
     <button class="big-btn blue" id="gobtn">Games</button>
     <button class="big-btn" id="add">Make something</button>
   </div>
@@ -788,7 +785,7 @@ function hasFrames(f){return !!f&&(Array.isArray(f)?f.length>0:!!f.sprite)}
 
 let friends=[];        // usernames, filled from Supabase after login
 const realNames={};    // username -> real name, filled from Supabase after login
-const online=new Set(['maya.k','tess.w']);   // pretend, for now
+const online=new Set();   // usernames with a live wall connection — filled by Realtime presence
 
 function esc(t){return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 /* username with the real name in brackets after it */
@@ -920,7 +917,6 @@ const HOWTO=[
    <path d="M100 108 q30-12 60-4" fill="none" ${IK} stroke="#C9A6E8" stroke-dasharray="5 6"/>`),
  lines:['Every picture only lasts <b>7 sleeps</b>.',
         'It goes faded and old, then floats away on its own.',
-        'Tap <b>Pretend it is tomorrow</b> to watch it happen.',
         'Be kind. If someone is mean, tell a grown-up.']
 }
 ];
@@ -1003,7 +999,7 @@ function renderFaces(){
     s.className='face'+(n===me?' me':'');
     s.style.setProperty('--tilt',(i%2?2:-2)+'deg');
     const dot=document.createElement('span');
-    const isOn=(n===me)||online.has(n);
+    const isOn=online.has(n);   // yours included: green only while really subscribed
     dot.className='live'+(isOn?' on':'');
     dot.title=isOn?'online now':'not here right now';
     s.appendChild(dot);
@@ -1264,15 +1260,6 @@ function makeStampDraggable(el,s,photoEl){
 
 /* addStamp lives in the Supabase module: it saves the stamp first,
    then puts it on the picture. */
-onTap(document.getElementById('tomorrow'),()=>{
-  posts.forEach(p=>p.age++);
-  const doomed=posts.filter(p=>p.age>=LASTS_DAYS).map(p=>p.id);
-  render();
-  if(doomed.length){
-    doomed.forEach(id=>{const el=document.querySelector('.print[data-id="'+id+'"]');if(el)el.classList.add('gone')});
-    setTimeout(()=>{posts=posts.filter(p=>p.age<LASTS_DAYS);render()},850);
-  }
-});
 
 /* ================= 4. make ================= */
 let draft={drawn:'cat',photo:null,frames:null,videoUrl:null,hasSound:false,bgKey:null,bgColour:'#F6E3C8',fx:[],mode:'stick',zoom:1,dx:0,dy:0,spin:0};
@@ -1591,7 +1578,7 @@ function gShow(){
        <g stroke="#2F3A3E" stroke-width="3">
        <circle cx="30" cy="42" r="11" fill="#EFF3F6"/><circle cx="60" cy="42" r="11" fill="#EFF3F6"/><circle cx="90" cy="42" r="11" fill="#EFF3F6"/>
        <circle cx="30" cy="70" r="11" fill="#EFF3F6"/><circle cx="60" cy="70" r="11" fill="#F0C64E"/><circle cx="90" cy="70" r="11" fill="#EFF3F6"/>
-       <circle cx="30" cy="94" r="11" fill="#E8688F"/><circle cx="60" cy="94" r="11" fill="#F0C64E"/><circle cx="90" cy="94" r="11" fill="#E8688F"/></g></g></svg>`]
+       <circle cx="30" cy="94" r="11" fill="#E8688F"/><circle cx="60" cy="94" r="11" fill="#F0C64E"/><circle cx="90" cy="94" r="11" fill="#E8688F"/></g></g></svg>`],
      ['ptt','Pin the Tail',
       `<svg viewBox="0 0 120 120"><g filter="url(#crayon)" stroke="#2F3A3E" stroke-width="3.5" stroke-linejoin="round">
        <ellipse cx="58" cy="62" rx="34" ry="22" fill="#A8A29C"/>
@@ -1605,9 +1592,12 @@ function gShow(){
       const c=document.createElement('div');c.className='gcard';
       c.style.setProperty('--gt',([-2,2,-1][i])+'deg');
       c.innerHTML=art+'<b>'+label+'</b>';
-      onTap(c,()=>{
+      onTap(c,async()=>{
         G.game=k;
-        if(k==='ptt'){G.view='ptt';P.phase='intro';gShow()}
+        if(k==='ptt'){
+          if(!await dbLoadRound())return;   // needs this week's seed and scores first
+          G.view='ptt';P.phase='intro';gShow();
+        }
         else{G.view='pick';gShow()}
       });
       m.appendChild(c);
@@ -1669,7 +1659,7 @@ function gShow(){
       foot.appendChild(lb);
     }else{
       const bk=document.createElement('button');bk.className='big-btn';bk.textContent='Back';
-      onTap(bk,()=>{P.phase=P.dist!=null?'result':'intro';gShow()});
+      onTap(bk,()=>{P.phase=P.drop!=null?'result':'intro';gShow()});
       foot.appendChild(bk);
     }
     return;
@@ -1800,11 +1790,12 @@ onTap(document.getElementById('gobtn'),()=>{G.view='menu';G.winner=null;gShow();
 
 /* ================= pin the tail on the donkey ================= */
 
-/* Everyone in a week gets the SAME donkey spot, or the leaderboard means nothing. */
+/* Everyone in a week gets the SAME donkey spot, or the leaderboard means nothing.
+   The seed comes from this week's game_rounds row, minted server-side with a
+   random number — so nobody can work out where a future donkey will be. */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-function roundKey(){return Math.floor(Date.now()/(7*864e5))}
 function donkeySpot(){
-  const r=mulberry32(roundKey()*2654435761);
+  const r=mulberry32(P.seed);
   return {x:0.06+r()*0.44, y:0.20+r()*0.42};   // top-left of the donkey, as a fraction of the stage
 }
 const DONKEY_W=0.34;          // donkey width as a fraction of stage width
@@ -1840,17 +1831,10 @@ const TIERS=[
 function tierFor(d){return TIERS.find(t=>d<=t.max)}
 function pointsFor(d){return Math.max(0,Math.round(1000-d*420))}
 
-let P={phase:'intro',drop:null,dist:null,played:false,scores:null};
-
-function pttScores(){
-  if(P.scores)return P.scores;
-  const r=mulberry32(roundKey()*97+13);
-  P.scores=friends.filter(f=>f!==me).map(f=>{
-    const d=0.08+r()*1.6;
-    return {who:f,dist:d,points:pointsFor(d),tier:tierFor(d).name};
-  });
-  return P.scores;
-}
+/* roundKey/seed come from this week's game_rounds row and scores/played from
+   game_scores — all filled by dbLoadRound (Supabase module) before the game
+   opens. drop/dist/points belong to this session's go. */
+let P={phase:'intro',drop:null,dist:null,points:null,played:false,scores:null,roundKey:null,seed:null};
 
 function pttBody(){
   const wrap=document.createElement('div');wrap.className='pttwrap';
@@ -1869,8 +1853,7 @@ function pttBody(){
   }
 
   if(P.phase==='board'){
-    const rows=pttScores().slice();
-    if(P.dist!=null)rows.push({who:me,dist:P.dist,points:pointsFor(P.dist),tier:tierFor(P.dist).name});
+    const rows=(P.scores||[]).slice();   // real scores, mine included once it has saved
     rows.sort((a,b)=>b.points-a.points);
     const b=document.createElement('div');b.className='board';
     rows.forEach((row,i)=>{
@@ -1882,7 +1865,7 @@ function pttBody(){
         +'<span class="bpts">'+row.points+'</span>';
       b.appendChild(d);
     });
-    if(P.dist==null){
+    if(!P.played){
       const n=document.createElement('p');n.className='bwait';
       n.textContent='You have not had your go yet.';
       b.insertBefore(n,b.firstChild);
@@ -1938,7 +1921,7 @@ function pttBody(){
     const tier=tierFor(P.dist);
     const h=document.createElement('p');h.className='tier';h.textContent=tier.emoji+' '+tier.name;
     const sub=document.createElement('p');sub.className='tiersub';sub.textContent=tier.sub;
-    const pts=document.createElement('p');pts.className='pts';pts.textContent=pointsFor(P.dist)+' points';
+    const pts=document.createElement('p');pts.className='pts';pts.textContent=(P.points!=null?P.points:pointsFor(P.dist))+' points';
     wrap.appendChild(h);wrap.appendChild(sub);wrap.appendChild(pts);
 
     const sc=document.createElement('div');sc.className='scale';
@@ -1986,7 +1969,7 @@ function addTail(st,dk){
   window.addEventListener('mouseup',drop);
 }
 
-function finishRound(x,y){
+async function finishRound(x,y){
   const spot=donkeySpot();
   const stEl=document.querySelector('.stage2');
   const w=stEl?stEl.clientWidth:400, h=stEl?stEl.clientHeight:300;
@@ -1995,7 +1978,11 @@ function finishRound(x,y){
   const targetPx={x:spot.x*w+donkeyWpx*TAIL_AT[0], y:spot.y*h+donkeyHpx*TAIL_AT[1]};
   const dropPx={x:x*w,y:y*h};
   const dist=Math.hypot(dropPx.x-targetPx.x,dropPx.y-targetPx.y)/donkeyWpx;
-  P.drop={x:x,y:y};P.dist=dist;P.played=true;P.phase='result';
+  P.drop={x:x,y:y};P.dist=dist;
+  const saved=await dbSubmitScore(dist);
+  if(saved==='saved'){P.played=true;P.phase=P.drop?'result':'board'}
+  else if(saved==='already'){P.played=true;P.phase='board'}   // go used on another tablet: straight to the board
+  else{P.drop=null;P.dist=null;P.phase='intro'}               // nothing saved, so the go is not used up
   gShow();
 }
 
@@ -2154,6 +2141,30 @@ async function enterWall(username,realName){
   try{await loadWall();}
   catch(e){flash(LOAD_FAIL);}
   show('wallscreen');renderFaces();render();
+  joinPresence();
+}
+
+/* ---------- who is really here ----------
+   Presence on the PRIVATE 'wall' Realtime channel (policies in migration
+   0006 — only signed-in members may join or listen). A dot goes green
+   while that member's tablet holds a live subscription — your own
+   included — and grey the moment it drops. */
+let presenceChannel=null;
+async function joinPresence(){
+  if(presenceChannel)return;
+  try{
+    await sb.realtime.setAuth();   // private channels check the caller's JWT
+    presenceChannel=sb.channel('wall',{config:{private:true,presence:{key:me}}});
+    presenceChannel.on('presence',{event:'sync'},()=>{
+      online.clear();
+      Object.keys(presenceChannel.presenceState()).forEach(u=>online.add(u));
+      renderFaces();
+    });
+    presenceChannel.subscribe(status=>{
+      if(status==='SUBSCRIBED'){presenceChannel.track({online_at:new Date().toISOString()}).catch(()=>{})}
+      else{online.clear();renderFaces()}   // all grey until we are really subscribed
+    });
+  }catch(e){/* the wall still works without the dots */}
 }
 
 /* ---------- sticking a new post on ---------- */
@@ -2254,6 +2265,62 @@ window.kickOut=async function(n){
   if(e2)flash(OOPS);
   try{await loadWall();}catch(e){}
   renderFaces();render();
+};
+
+/* ---------- pin the tail: the weekly round and the real leaderboard ----------
+   The seed lives in game_rounds, minted server-side; every go is one row
+   in game_scores, and the unique constraint — not the client — is what
+   enforces one go per round. current_round() uses the SERVER's clock, so
+   a tablet with a wonky clock near the weekly rollover cannot read (or
+   score into) the wrong week. */
+window.dbLoadRound=async function(){
+  try{
+    const {data:rounds,error:rErr}=await sb.rpc('current_round',{game:'donkey'});
+    if(rErr)throw rErr;
+    const round=rounds&&rounds[0];
+    if(!round){flash('This week\'s round is not ready yet. Try again in a minute.');return false}
+    const {data:scores,error:sErr}=await sb.from('game_scores')
+      .select('player_id,points,detail')
+      .eq('game_key','donkey').eq('round_key',round.round_key);
+    if(sErr)throw sErr;
+    if(P.roundKey!==round.round_key){P.drop=null;P.dist=null;P.points=null;P.phase='intro'}
+    P.roundKey=round.round_key;P.seed=Number(round.seed);
+    P.scores=(scores||[]).map(s=>{
+      const d=s.detail&&typeof s.detail.dist==='number'?s.detail.dist:null;
+      return {who:uname(s.player_id),points:s.points,tier:d!=null?tierFor(d).name:''};
+    });
+    const mine=(scores||[]).find(s=>s.player_id===myId);
+    P.played=!!mine;
+    if(mine)P.points=mine.points;
+    return true;
+  }catch(e){flash(LOAD_FAIL);return false}
+};
+
+window.dbSubmitScore=async function(dist){
+  const {error}=await sb.from('game_scores').insert({
+    game_key:'donkey',round_key:P.roundKey,player_id:myId,
+    points:pointsFor(dist),detail:{dist}
+  });
+  if(!error){
+    P.points=pointsFor(dist);
+    if(!await dbLoadRound()){   // refresh the board; keep a local row if that fails
+      P.scores=(P.scores||[]).concat([{who:me,points:P.points,tier:tierFor(dist).name}]);
+      P.played=true;
+    }
+    return 'saved';
+  }
+  if(error.code==='23505'){   // unique constraint: this week's go was already used
+    await dbLoadRound();
+    P.played=true;
+    return 'already';
+  }
+  if(error.code==='42501'||error.code==='23503'){   // the round closed while they were aiming
+    flash('That round just finished! A new donkey is ready.');
+    await dbLoadRound();
+  }else{
+    flash('Your go did not save. Have it again.');
+  }
+  return 'failed';
 };
 
 async function routeLogin(){

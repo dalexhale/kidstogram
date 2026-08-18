@@ -9,3 +9,4 @@ Thumbs.db
 *.log
 supabase/.temp/
 .pdf
+cripts/schedule-sweep.sql
