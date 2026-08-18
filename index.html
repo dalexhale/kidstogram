@@ -241,7 +241,7 @@ main{padding:16px 14px 128px;max-width:640px;margin:0 auto}
 .oopsnote.on{display:block;animation:pop .2s ease-out}
 
 /* ===== 4. make ===== */
-#make{padding:18px 16px 40px}
+#make{padding:18px 16px 128px}   /* clearance for the fixed bottom bar, like main */
 #make.on{display:block}
 #make h2{font-family:'Rubik Bubbles',cursive;font-size:30px;margin:0 0 12px;text-align:center;color:var(--blue)}
 .stage{width:100%;max-width:330px;aspect-ratio:1;margin:0 auto;position:relative;overflow:hidden;
@@ -265,7 +265,6 @@ main{padding:16px 14px 128px;max-width:640px;margin:0 auto}
 .sw.sel{box-shadow:0 0 0 4px var(--ink) inset}
 .ctrl label{font-size:19px;margin:0 0 4px}
 input[type=range]{width:100%;height:34px;accent-color:var(--pink)}
-.make-foot{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap}
 .sechead{font-size:19px;text-align:center;color:var(--pencil);margin:12px 0 0}
 .modes{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:10px 0 2px}
 .mode{
@@ -617,7 +616,8 @@ input[type=range]{width:100%;height:34px;accent-color:var(--pink)}
     <p class="hint">Drag the picture with your finger to move it.</p>
   </div>
 
-  <div class="make-foot">
+  <!-- fixed, like the wall's bar, so the way back is never below the fold -->
+  <div class="bar">
     <button class="small-btn" id="cancel">Go back</button>
     <button class="big-btn green" id="stickit">Stick it on!</button>
   </div>
@@ -1063,6 +1063,7 @@ function render(){
       <div class="actions">
         <button class="act" data-a="stamp">Stamps (${p.stamps.length})</button>
         <button class="act" data-a="cmt">Comments (${p.comments.length})</button>
+        ${(p.who===me||me===BOSS)?'<button class="act" data-a="del">Delete</button>':''}
       </div>`;
 
     const photo=card.querySelector('.photo');
@@ -1099,6 +1100,7 @@ function render(){
 
     card.querySelectorAll('.act').forEach(b=>onTap(b,e=>{
       e.stopPropagation();
+      if(b.dataset.a==='del'){dbDeletePost(p);return}
       if(b.dataset.a==='stamp'){openStamps=openStamps===p.id?null:p.id;openCmts=null}
       else{openCmts=openCmts===p.id?null:p.id;openStamps=null}
       render();
@@ -2098,6 +2100,7 @@ function mapPost(r){
   const isStrip=r.kind==='video'&&r.frame_count>1;
   return {
     id:r.id, who:uname(r.author_id),
+    storagePath:r.storage_path||null,   // so deleting a post can remove its file too
     drawn:r.drawn_key||null,
     photo:(r.kind==='photo'||r.kind==='drawing')?url:null,
     frames:isStrip?{sprite:url,n:r.frame_count}:null,
@@ -2222,6 +2225,24 @@ window.dbStickIt=async function(){
   }
   try{await loadWall();}catch(e){flash(LOAD_FAIL);}
   return true;
+};
+
+/* ---------- deleting a post ----------
+   Your own, or any if you are the owner — the RLS policies on posts and
+   storage.objects both allow exactly that pair. The FILE goes first: if
+   the row delete then fails, the sweep still finds the row at expiry and
+   finishes the job, whereas a row-first order could orphan the file in
+   the bucket forever. */
+window.dbDeletePost=async function(p){
+  if(!confirm('Delete this picture?\n\nIt will be gone for everyone, for good.'))return;
+  if(p.storagePath){
+    const {error:rmErr}=await sb.storage.from('media').remove([p.storagePath]);
+    if(rmErr){flash(OOPS);return}
+  }
+  const {error}=await sb.from('posts').delete().eq('id',p.id);
+  if(error){flash(OOPS);return}
+  posts=posts.filter(x=>x.id!==p.id);
+  render();
 };
 
 /* ---------- comments ---------- */
