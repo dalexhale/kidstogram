@@ -1042,6 +1042,10 @@ function render(){
   if(!posts.length){wall.innerHTML='<div class="empty">The wall is empty.<span>Tap "Make something" to stick one up.</span></div>';return}
 
   posts.forEach(p=>{
+    /* belt and braces: a bad playback value must never abort the render —
+       one throw here would hide every post after this one */
+    if(!Number.isFinite(p.vol))p.vol=1;
+    if(!Number.isFinite(p.bright))p.bright=1;
     const fade=fadeFor(p.age),left=LASTS_DAYS-p.age,
           isVid=!!(p.videoUrl||hasFrames(p.frames));
     const card=document.createElement('div');
@@ -1077,7 +1081,7 @@ function render(){
     // real video: set the volume and start it
     const vEl=photo.querySelector('video');
     if(vEl){
-      vEl.volume=p.vol;
+      vEl.volume=Math.min(1,Math.max(0,p.vol));   // outside 0..1 throws too
       vEl.muted=(p.vol===0);
       if(p.playing) vEl.play().catch(()=>{});
     }
@@ -2109,6 +2113,7 @@ function mapPost(r){
     fx:r.fx||[], mode:r.sit||'stick',
     zoom:r.zoom, dx:r.dx, dy:r.dy, spin:r.spin,
     playing:false,
+    vol:1, bright:1,   // playback settings are per-session, not stored — must never be undefined
     age:Math.max(0,Math.floor((Date.now()-new Date(r.created_at).getTime())/864e5)),
     tilt:rnd(-2,2).toFixed(2),
     stamps:(r.stamps||[]).map(s=>({id:s.id,kind:s.kind,by:uname(s.author_id),x:s.x,y:s.y,spin:s.spin})),
