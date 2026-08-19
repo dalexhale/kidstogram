@@ -8,5 +8,5 @@ dist/
 Thumbs.db
 *.log
 supabase/.temp/
-.pdf
-cripts/schedule-sweep.sql
+*.pdf
+scripts/schedule-sweep.sql
